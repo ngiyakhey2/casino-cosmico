@@ -7,9 +7,11 @@ edition = "2021"
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
+redis = { version = "0.21", features = ["tls", "tokio-comp", "tokio-native-tls-comp"] }
 reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 strum = { version = "0.23", features = ["derive"] }
 thiserror = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+url = "2.2"

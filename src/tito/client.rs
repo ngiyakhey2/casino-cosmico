@@ -1,4 +1,4 @@
-mod tickets_handler;
+pub mod tickets_handler;
 
 use reqwest::header;
 use tickets_handler::TicketsHandler;
