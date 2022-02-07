@@ -1,17 +1,31 @@
 use casino_cosmico::tito;
 use redis::AsyncCommands;
+use std::env;
 
 const ACCOUNT_SLUG: &str = "con-of-heroes";
 const EVENT_SLUG: &str = "con-of-heroes";
 const EARLY_BIRD_TICKET_SLUG: &str = "con-of-the-rings-early-bird-ticket";
 
-#[tokio::main]
-async fn main() {
-    let tito_api_token = std::env::var("TITO_API_TOKEN").unwrap();
-    let mut rediss_url = url::Url::parse(&std::env::var("REDIS_TLS_URL").unwrap()).unwrap();
+/// Setup and return an async redis connection
+async fn redis_connection(redis_str: &str) -> Result<redis::aio::Connection, redis::RedisError> {
     // Heroku Redis uses self signed certs, so need to set OPENSSL_VERIFY_NONE
     // https://devcenter.heroku.com/articles/heroku-redis#security-and-compliance
-    rediss_url.set_fragment(Some("insecure"));
+    let mut url = url::Url::parse(redis_str).unwrap();
+    url.set_fragment(Some("insecure"));
+
+    let redis_client = redis::Client::open(url)?;
+    redis_client.get_tokio_connection().await
+}
+
+#[tokio::main]
+async fn main() {
+    let tito_api_token = env::var("TITO_API_TOKEN").unwrap();
+    let redis_url = env::var("REDIS_TLS_URL").unwrap();
+    let discord_token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+    let application_id: u64 = env::var("DISCORD_APPLICATION_ID")
+        .expect("Expected an application id in the environment")
+        .parse()
+        .expect("application id is not a valid id");
 
     let tito_client = tito::client::ClientBuilder::new(&tito_api_token)
         .expect("Could not build Tito HTTP Client")
@@ -36,8 +50,7 @@ async fn main() {
         })
         .collect::<Vec<String>>();
 
-    let redis_client = redis::Client::open(rediss_url).expect("Could not connect to redis.");
-    let mut connection = redis_client.get_tokio_connection().await.unwrap();
+    let mut connection = redis_connection(&redis_url).await.unwrap();
     let _: () = connection.rpush("raffle", attendees).await.unwrap();
 
     let redis_tickets: Vec<String> = connection.lrange("raffle", 0, -1).await.unwrap();
