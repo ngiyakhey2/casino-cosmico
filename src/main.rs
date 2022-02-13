@@ -1,13 +1,9 @@
-use casino_cosmico::tito;
+use casino_cosmico::{discord::commands, tito};
 use redis::AsyncCommands;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
-    model::{
-        gateway::Ready,
-        interactions::{Interaction, InteractionResponseType},
-        prelude::GuildId,
-    },
+    model::{gateway::Ready, interactions::Interaction, prelude::GuildId},
 };
 use std::env;
 
@@ -41,9 +37,13 @@ impl EventHandler for SlashHandler {
         );
 
         let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
-            commands.create_application_command(|command| {
-                command.name("ping").description("A ping command")
-            })
+            commands
+                .create_application_command(|command| {
+                    command.name("ping").description("A ping command")
+                })
+                .create_application_command(|command| {
+                    command.name("load").description("Load tickets from tito")
+                })
         })
         .await;
 
@@ -52,19 +52,12 @@ impl EventHandler for SlashHandler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
-            let content = match command.data.name.as_str() {
-                "ping" => "Pong!".to_string(),
-                _ => "not implemented".to_string(),
+            let result = match command.data.name.as_str() {
+                "ping" => commands::pong(&ctx, &command).await,
+                _ => Ok(()),
             };
 
-            if let Err(err) = command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|message| message.content(content))
-                })
-                .await
-            {
+            if let Err(err) = result {
                 eprintln!("Cannot respond to slash comamnd: {}", err);
             }
         }

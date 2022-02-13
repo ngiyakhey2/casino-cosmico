@@ -1,3 +1,4 @@
+pub mod discord;
 pub mod tito;
 
 use reqwest::{header, ClientBuilder};
