@@ -1,4 +1,7 @@
-use casino_cosmico::{discord::commands, tito};
+use casino_cosmico::{
+    discord::{commands, type_map_keys},
+    tito,
+};
 use redis::AsyncCommands;
 use serenity::{
     async_trait,
@@ -29,12 +32,10 @@ impl EventHandler for SlashHandler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        let guild_id = GuildId(
-            env::var("DISCORD_GUILD_ID")
-                .expect("expected DISCORD_GUILD_ID in the environment")
-                .parse()
-                .expect("DISCORD_GUILD_ID must be an integer"),
-        );
+        let data = ctx.data.read().await;
+        let guild_id = data
+            .get::<type_map_keys::GuildId>()
+            .expect("Expected GuildId in TypeMap");
 
         let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
             commands
@@ -70,16 +71,29 @@ async fn main() {
         env::var("TITO_API_TOKEN").expect("Expected environment variable: TITO_API_TOKEN");
     let redis_url = env::var("REDIS_TLS_URL").expect("Expected env variable: REDIS_TLS_URL");
     let discord_token = env::var("DISCORD_TOKEN").expect("Expected env variable: DISCORD_TOKEN");
+    let guild_id = GuildId(
+        env::var("DISCORD_GUILD_ID")
+            .expect("Expected env variable: DISCORD_GUILD_ID")
+            .parse()
+            .expect("DISCORD_GUILD_ID must be an integer"),
+    );
     let application_id: u64 = env::var("DISCORD_APPLICATION_ID")
         .expect("Expected environment variable: DISCORD_APPLICATION_ID")
         .parse()
         .expect("application id is not a valid id");
+    let connection = redis_connection(&redis_url).await.unwrap();
 
     let mut client = serenity::Client::builder(discord_token)
         .application_id(application_id)
         .event_handler(SlashHandler)
         .await
         .expect("Error creating Discord cliet.");
+
+    {
+        let mut data = client.data.write().await;
+        data.insert::<type_map_keys::GuildId>(guild_id);
+        data.insert::<type_map_keys::RedisConnection>(connection);
+    }
 
     if let Err(err) = client.start().await {
         eprintln!("Client error: {:?}", err);
