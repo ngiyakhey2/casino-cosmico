@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
+bb8 = "0.7"
+bb8-redis = "0.10.1"
 redis = { version = "0.21", features = ["tls", "tokio-comp", "tokio-native-tls-comp"] }
 reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }

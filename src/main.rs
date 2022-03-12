@@ -1,8 +1,9 @@
+use bb8::Pool;
+use bb8_redis::RedisConnectionManager;
 use casino_cosmico::{
     discord::{commands, type_map_keys},
     tito,
 };
-use redis::AsyncCommands;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
@@ -13,16 +14,17 @@ use std::env;
 const ACCOUNT_SLUG: &str = "con-of-heroes";
 const EVENT_SLUG: &str = "con-of-heroes";
 const EARLY_BIRD_TICKET_SLUG: &str = "con-of-the-rings-early-bird-ticket";
+const REDIS_KEY: &str = "raffle";
 
-/// Setup and return an async redis connection
-async fn redis_connection(redis_str: &str) -> Result<redis::aio::Connection, redis::RedisError> {
+/// Setup and return an async redis pool
+async fn redis_pool(redis_str: &str) -> Result<Pool<RedisConnectionManager>, redis::RedisError> {
     // Heroku Redis uses self signed certs, so need to set OPENSSL_VERIFY_NONE
     // https://devcenter.heroku.com/articles/heroku-redis#security-and-compliance
     let mut url = url::Url::parse(redis_str).unwrap();
     url.set_fragment(Some("insecure"));
 
-    let redis_client = redis::Client::open(url)?;
-    redis_client.get_tokio_connection().await
+    let manager = RedisConnectionManager::new(url)?;
+    Pool::builder().build(manager).await
 }
 
 struct SlashHandler;
@@ -55,6 +57,18 @@ impl EventHandler for SlashHandler {
         if let Interaction::ApplicationCommand(command) = interaction {
             let result = match command.data.name.as_str() {
                 "ping" => commands::pong(&ctx, &command).await,
+                "load" => {
+                    let load_params = commands::LoadParams {
+                        account_slug: ACCOUNT_SLUG,
+                        event_slug: EVENT_SLUG,
+                        redis_key: REDIS_KEY,
+                        ticket_slugs: [EARLY_BIRD_TICKET_SLUG]
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                    };
+                    commands::load(&ctx, &command, load_params).await
+                }
                 _ => Ok(()),
             };
 
@@ -81,7 +95,10 @@ async fn main() {
         .expect("Expected environment variable: DISCORD_APPLICATION_ID")
         .parse()
         .expect("application id is not a valid id");
-    let connection = redis_connection(&redis_url).await.unwrap();
+    let connection = redis_pool(&redis_url).await.unwrap();
+    let tito_client = tito::client::ClientBuilder::new(&tito_api_token)
+        .expect("Could not build Tito HTTP Client")
+        .build();
 
     let mut client = serenity::Client::builder(discord_token)
         .application_id(application_id)
@@ -92,42 +109,11 @@ async fn main() {
     {
         let mut data = client.data.write().await;
         data.insert::<type_map_keys::GuildId>(guild_id);
-        data.insert::<type_map_keys::RedisConnection>(connection);
+        data.insert::<type_map_keys::RedisPool>(connection);
+        data.insert::<type_map_keys::TitoClient>(tito_client);
     }
 
     if let Err(err) = client.start().await {
         eprintln!("Client error: {:?}", err);
     }
-
-    let tito_client = tito::client::ClientBuilder::new(&tito_api_token)
-        .expect("Could not build Tito HTTP Client")
-        .build();
-    let tickets = tito_client
-        .tickets(ACCOUNT_SLUG, EVENT_SLUG)
-        .release_ids(vec![EARLY_BIRD_TICKET_SLUG.to_string()])
-        .states(vec![tito::client::tickets_handler::State::Complete])
-        .send()
-        .await
-        .unwrap();
-    let attendees = tickets
-        .iter()
-        .filter_map(|ticket| {
-            if let Some(first_name) = &ticket.first_name {
-                if let Some(last_name) = &ticket.last_name {
-                    return Some(format!("{first_name} {last_name}"));
-                }
-            }
-
-            return None;
-        })
-        .collect::<Vec<String>>();
-
-    let mut connection = redis_connection(&redis_url).await.unwrap();
-    let _: () = connection.rpush("raffle", attendees).await.unwrap();
-
-    let redis_tickets: Vec<String> = connection.lrange("raffle", 0, -1).await.unwrap();
-    let _: () = connection.del("raffle").await.unwrap();
-
-    println!("{:?}", tickets.len());
-    println!("{:?}", redis_tickets);
 }
