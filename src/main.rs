@@ -47,6 +47,9 @@ impl EventHandler for SlashHandler {
                 .create_application_command(|command| {
                     command.name("load").description("Load tickets from tito")
                 })
+                .create_application_command(|command| {
+                    command.name("raffle").description("Pick a winner")
+                })
         })
         .await;
 
@@ -69,6 +72,7 @@ impl EventHandler for SlashHandler {
                     };
                     commands::load(&ctx, &command, load_params).await
                 }
+                "raffle" => commands::raffle(&ctx, &command, REDIS_KEY).await,
                 _ => Ok(()),
             };
 

@@ -1,5 +1,6 @@
 use crate::{discord::type_map_keys, tito};
 use bb8_redis::redis::AsyncCommands;
+use rand::{Rng, SeedableRng};
 use serenity::{
     client::Context,
     model::interactions::{
@@ -77,6 +78,32 @@ pub async fn load<'a>(
                         &loaded.len()
                     ))
                 })
+        })
+        .await
+}
+
+pub async fn raffle(
+    ctx: &Context,
+    command: &ApplicationCommandInteraction,
+    redis_key: &str,
+) -> serenity::Result<()> {
+    let data = ctx.data.read().await;
+    let redis_pool = data
+        .get::<type_map_keys::RedisPool>()
+        .expect("Expected RedisPool in TypeMap");
+    let mut redis_connection = redis_pool.get().await.unwrap();
+
+    let mut rng = rand::rngs::StdRng::from_entropy();
+    let size: usize = redis_connection.llen(redis_key).await.unwrap();
+    let index: isize = rng.gen_range(0..size) as isize;
+    let winner: String = redis_connection.lindex(redis_key, index).await.unwrap();
+    let _: () = redis_connection.lrem(redis_key, 1, &winner).await.unwrap();
+
+    command
+        .create_interaction_response(&ctx.http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| message.content(format!("Winner is {winner}")))
         })
         .await
 }
