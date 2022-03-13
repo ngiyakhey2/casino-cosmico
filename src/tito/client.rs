@@ -56,6 +56,7 @@ impl ClientBuilder {
 }
 
 /// Tito API Client
+#[derive(Clone)]
 pub struct Client {
     client: reqwest::Client,
     base_url: String,

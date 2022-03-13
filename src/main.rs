@@ -4,12 +4,15 @@ use casino_cosmico::{
     discord::{commands, type_map_keys},
     tito,
 };
+use rand::SeedableRng;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
     model::{gateway::Ready, interactions::Interaction, prelude::GuildId},
 };
 use std::env;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 const ACCOUNT_SLUG: &str = "con-of-heroes";
 const EVENT_SLUG: &str = "con-of-heroes";
@@ -103,6 +106,7 @@ async fn main() {
     let tito_client = tito::client::ClientBuilder::new(&tito_api_token)
         .expect("Could not build Tito HTTP Client")
         .build();
+    let rng = Arc::new(RwLock::new(rand::rngs::StdRng::from_entropy()));
 
     let mut client = serenity::Client::builder(discord_token)
         .application_id(application_id)
@@ -115,6 +119,7 @@ async fn main() {
         data.insert::<type_map_keys::GuildId>(guild_id);
         data.insert::<type_map_keys::RedisPool>(connection);
         data.insert::<type_map_keys::TitoClient>(tito_client);
+        data.insert::<type_map_keys::Rng>(rng);
     }
 
     if let Err(err) = client.start().await {

@@ -1,6 +1,6 @@
 use crate::{discord::type_map_keys, tito};
 use bb8_redis::redis::AsyncCommands;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 use serenity::{
     client::Context,
     model::interactions::{
@@ -30,13 +30,19 @@ pub async fn load<'a>(
     command: &ApplicationCommandInteraction,
     params: LoadParams<'a>,
 ) -> serenity::Result<()> {
-    let data = ctx.data.read().await;
-    let redis_pool = data
-        .get::<type_map_keys::RedisPool>()
-        .expect("Expected RedisPool in TypeMap");
-    let tito_client = data
-        .get::<type_map_keys::TitoClient>()
-        .expect("Expected TitoClient in TypeMap");
+    let (redis_pool, tito_client) = {
+        // keep read locks open as small as possible
+        let data = ctx.data.read().await;
+
+        (
+            data.get::<type_map_keys::RedisPool>()
+                .expect("Expected RedisPool in TypeMap")
+                .clone(),
+            data.get::<type_map_keys::TitoClient>()
+                .expect("Expected TitoClient in TypeMap")
+                .clone(),
+        )
+    };
     let mut redis_connection = redis_pool.get().await.unwrap();
 
     let tickets = tito_client
@@ -87,15 +93,25 @@ pub async fn raffle(
     command: &ApplicationCommandInteraction,
     redis_key: &str,
 ) -> serenity::Result<()> {
-    let data = ctx.data.read().await;
-    let redis_pool = data
-        .get::<type_map_keys::RedisPool>()
-        .expect("Expected RedisPool in TypeMap");
+    let redis_pool = {
+        // keep read locks open as small as possible
+        let data = ctx.data.read().await;
+        data.get::<type_map_keys::RedisPool>()
+            .expect("Expected RedisPool in TypeMap")
+            .clone()
+    };
     let mut redis_connection = redis_pool.get().await.unwrap();
-
-    let mut rng = rand::rngs::StdRng::from_entropy();
     let size: usize = redis_connection.llen(redis_key).await.unwrap();
-    let index: isize = rng.gen_range(0..size) as isize;
+    let index: isize = {
+        // keep read locks open as small as possible
+        let data = ctx.data.read().await;
+        let rng_lock = data
+            .get::<type_map_keys::Rng>()
+            .expect("Expected Rng in TypeMap");
+        // keep write locks open as small as possible
+        let mut rng = rng_lock.write().await;
+        rng.gen_range(0..size) as isize
+    };
     let winner: String = redis_connection.lindex(redis_key, index).await.unwrap();
     let _: () = redis_connection.lrem(redis_key, 1, &winner).await.unwrap();
 
