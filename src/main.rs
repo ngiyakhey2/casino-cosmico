@@ -9,10 +9,10 @@ use serenity::{
     async_trait,
     client::{Context, EventHandler},
     model::{gateway::Ready, interactions::Interaction, prelude::GuildId},
+    prelude::RwLock,
 };
 use std::env;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 const ACCOUNT_SLUG: &str = "con-of-heroes";
 const EVENT_SLUG: &str = "con-of-heroes";
@@ -37,11 +37,7 @@ impl EventHandler for SlashHandler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        let data = ctx.data.read().await;
-        let guild_id = data
-            .get::<type_map_keys::GuildId>()
-            .expect("Expected GuildId in TypeMap");
-
+        let guild_id = type_map_keys::GuildId::get(&ctx.data).await;
         let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
             commands
                 .create_application_command(|command| {
