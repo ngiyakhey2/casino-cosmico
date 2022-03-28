@@ -135,3 +135,27 @@ pub async fn raffle(
         })
         .await
 }
+
+pub async fn clear(
+    ctx: &Context,
+    command: &ApplicationCommandInteraction,
+    redis_key: &str,
+) -> serenity::Result<()> {
+    let redis_pool = {
+        // keep read locks open as small as possible
+        let data = ctx.data.read().await;
+        data.get::<type_map_keys::RedisPool>()
+            .expect("Expected RedisPool in TypeMap")
+            .clone()
+    };
+    let mut redis_connection = redis_pool.get().await.unwrap();
+    let _: () = redis_connection.del(redis_key).await.unwrap();
+
+    command
+        .create_interaction_response(&ctx.http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| message.content(format!("Cleared list")))
+        })
+        .await
+}

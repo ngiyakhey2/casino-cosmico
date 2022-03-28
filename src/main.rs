@@ -53,6 +53,9 @@ impl EventHandler for SlashHandler {
                 .create_application_command(|command| {
                     command.name("raffle").description("Pick a winner")
                 })
+                .create_application_command(|command| {
+                    command.name("clear").description("Clear raffle list")
+                })
         })
         .await;
 
@@ -62,6 +65,7 @@ impl EventHandler for SlashHandler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
             let result = match command.data.name.as_str() {
+                "clear" => commands::clear(&ctx, &command, REDIS_KEY).await,
                 "ping" => commands::pong(&ctx, &command).await,
                 "load" => {
                     let load_params = commands::LoadParams {
