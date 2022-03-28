@@ -102,6 +102,18 @@ pub async fn raffle(
     };
     let mut redis_connection = redis_pool.get().await.unwrap();
     let size: usize = redis_connection.llen(redis_key).await.unwrap();
+    if size <= 0 {
+        return command
+            .create_interaction_response(&ctx.http, |response| {
+                response
+                    .kind(InteractionResponseType::ChannelMessageWithSource)
+                    .interaction_response_data(|message| {
+                        message.content(format!("No entries in the raffle."))
+                    })
+            })
+            .await;
+    }
+
     let index: isize = {
         // keep read locks open as small as possible
         let data = ctx.data.read().await;
