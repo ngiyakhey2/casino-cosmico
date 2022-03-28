@@ -126,3 +126,31 @@ pub async fn clear(
         })
         .await
 }
+
+pub async fn add(
+    ctx: &Context,
+    command: &ApplicationCommandInteraction,
+    redis_key: &str,
+) -> serenity::Result<()> {
+    let name = match command
+        .data
+        .options
+        .get(0)
+        .and_then(|option| option.value.as_ref())
+        .and_then(|value| value.as_str())
+    {
+        Some(name) => name,
+        None => return Ok(()),
+    };
+    let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
+    let mut redis_connection = redis_pool.get().await.unwrap();
+    let _: () = redis_connection.rpush(redis_key, name).await.unwrap();
+
+    command
+        .create_interaction_response(&ctx.http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| message.content(format!("Added {name}")))
+        })
+        .await
+}

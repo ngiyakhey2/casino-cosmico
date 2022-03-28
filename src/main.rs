@@ -8,7 +8,11 @@ use rand::SeedableRng;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
-    model::{gateway::Ready, interactions::Interaction, prelude::GuildId},
+    model::{
+        gateway::Ready,
+        interactions::{application_command::ApplicationCommandOptionType, Interaction},
+        prelude::GuildId,
+    },
     prelude::RwLock,
 };
 use std::env;
@@ -41,6 +45,18 @@ impl EventHandler for SlashHandler {
         let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
             commands
                 .create_application_command(|command| {
+                    command
+                        .name("add")
+                        .description("Add a entry by hand")
+                        .create_option(|option| {
+                            option
+                                .name("name")
+                                .description("Entry's Full Name")
+                                .kind(ApplicationCommandOptionType::String)
+                                .required(true)
+                        })
+                })
+                .create_application_command(|command| {
                     command.name("ping").description("A ping command")
                 })
                 .create_application_command(|command| {
@@ -61,6 +77,7 @@ impl EventHandler for SlashHandler {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = interaction {
             let result = match command.data.name.as_str() {
+                "add" => commands::add(&ctx, &command, REDIS_KEY).await,
                 "clear" => commands::clear(&ctx, &command, REDIS_KEY).await,
                 "ping" => commands::pong(&ctx, &command).await,
                 "load" => {
