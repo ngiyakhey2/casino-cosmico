@@ -19,8 +19,8 @@ use serenity::{
     prelude::RwLock,
     Error as SerenityError,
 };
-use std::env;
-use std::sync::Arc;
+use std::{env, sync::Arc};
+use tracing::{error, info, instrument};
 
 const ACCOUNT_SLUG: &str = "con-of-heroes";
 const EVENT_SLUG: &str = "con-of-heroes";
@@ -55,10 +55,10 @@ struct SlashHandler;
 #[async_trait]
 impl EventHandler for SlashHandler {
     async fn ready(&self, ctx: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        info!("{} is connected!", ready.user.name);
 
         let guild_id = type_map_keys::GuildId::get(&ctx.data).await;
-        let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
+        GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
             commands.create_application_command(|command| {
                 command
                     .name("raffle")
@@ -103,9 +103,8 @@ impl EventHandler for SlashHandler {
                     })
             })
         })
-        .await;
-
-        println!("Support the following Guild Commands: {:#?}", commands);
+        .await
+        .unwrap();
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
@@ -119,7 +118,7 @@ impl EventHandler for SlashHandler {
         }
 
         if let Err(err) = match_subcommand(&ctx, &command).await {
-            eprintln!("Cannot respond to slash comamnd: {}", err);
+            error!("Cannot respond to slash comamnd: {}", err);
         }
     }
 }
@@ -180,7 +179,10 @@ async fn match_subcommand(
 }
 
 #[tokio::main]
+#[instrument]
 async fn main() {
+    tracing_subscriber::fmt::init();
+
     let tito_api_token =
         env::var("TITO_API_TOKEN").expect("Expected environment variable: TITO_API_TOKEN");
     let redis_url = env::var("REDIS_TLS_URL").expect("Expected env variable: REDIS_TLS_URL");
@@ -216,6 +218,6 @@ async fn main() {
     }
 
     if let Err(err) = client.start().await {
-        eprintln!("Client error: {:?}", err);
+        error!("Client error: {:?}", err);
     }
 }

@@ -6,7 +6,9 @@ use serenity::{
         application_command::ApplicationCommandInteraction, InteractionResponseType,
     },
 };
+use tracing::instrument;
 
+#[derive(Debug)]
 pub struct LoadParams<'a> {
     pub account_slug: &'a str,
     pub event_slug: &'a str,
@@ -14,6 +16,7 @@ pub struct LoadParams<'a> {
     pub ticket_slugs: Vec<String>,
 }
 
+#[instrument(skip(ctx))]
 pub async fn load<'a>(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
@@ -66,6 +69,7 @@ pub async fn load<'a>(
         .await
 }
 
+#[instrument(skip(ctx))]
 pub async fn raffle(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
@@ -99,6 +103,7 @@ pub async fn raffle(
         .await
 }
 
+#[instrument(skip(ctx))]
 pub async fn clear(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
@@ -117,6 +122,7 @@ pub async fn clear(
         .await
 }
 
+#[instrument(skip(ctx))]
 pub async fn add(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
@@ -136,6 +142,7 @@ pub async fn add(
         .await
 }
 
+#[instrument(skip(ctx))]
 pub async fn size(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
