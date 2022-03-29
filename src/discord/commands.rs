@@ -135,3 +135,23 @@ pub async fn add(
         })
         .await
 }
+
+pub async fn size(
+    ctx: &Context,
+    command: &ApplicationCommandInteraction,
+    redis_key: &str,
+) -> serenity::Result<()> {
+    let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
+    let mut redis_connection = redis_pool.get().await.unwrap();
+    let size: usize = redis_connection.llen(redis_key).await.unwrap();
+
+    command
+        .create_interaction_response(&ctx.http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| {
+                    message.content(format!("{size} entries in the raffle"))
+                })
+        })
+        .await
+}

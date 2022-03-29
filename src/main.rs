@@ -95,6 +95,12 @@ impl EventHandler for SlashHandler {
                             .description("Load tickets from tito")
                             .kind(ApplicationCommandOptionType::SubCommand)
                     })
+                    .create_option(|option| {
+                        option
+                            .name("size")
+                            .description("Number of entries in the raffle")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                    })
             })
         })
         .await;
@@ -164,6 +170,9 @@ async fn match_subcommand(
                 .map_err(|err| err.into())
         }
         "pick" => commands::raffle(ctx, command, REDIS_KEY)
+            .await
+            .map_err(|err| err.into()),
+        "size" => commands::size(ctx, command, REDIS_KEY)
             .await
             .map_err(|err| err.into()),
         _ => Err(SlashCommandError::UnknownSubCommand),
