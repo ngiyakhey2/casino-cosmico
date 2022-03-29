@@ -17,9 +17,7 @@ impl TypeMapKey for GuildId {
 impl GuildId {
     pub async fn get(data: &Arc<RwLock<TypeMap>>) -> SerenityGuildId {
         let data = data.read().await;
-        data.get::<Self>()
-            .expect("Expected GuildId in TypeMap")
-            .clone()
+        *data.get::<Self>().expect("Expected GuildId in TypeMap")
     }
 }
 

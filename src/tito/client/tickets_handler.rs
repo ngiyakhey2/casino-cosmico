@@ -159,7 +159,7 @@ impl<'client> TicketsHandler<'client> {
         if let Some(created_at) = &self.created_at {
             for date in created_at {
                 request_builder = request_builder.query(&[(
-                    format!("?search[created_at][{}]", date.operator.to_string()),
+                    format!("?search[created_at][{}]", date.operator),
                     date.date_time.to_rfc3339(),
                 )]);
             }
@@ -168,7 +168,7 @@ impl<'client> TicketsHandler<'client> {
         if let Some(updated_at) = &self.updated_at {
             for date in updated_at {
                 request_builder = request_builder.query(&[(
-                    format!("?search[updated_at][{}]", date.operator.to_string()),
+                    format!("?search[updated_at][{}]", date.operator),
                     date.date_time.to_rfc3339(),
                 )]);
             }

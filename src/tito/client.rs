@@ -37,12 +37,12 @@ pub struct ClientBuilder {
 impl ClientBuilder {
     pub fn new(api_token: &str) -> Result<Self, ClientBuilderError> {
         Ok(Self {
-            client: client(&api_token)?,
+            client: client(api_token)?,
             base_url: None,
         })
     }
 
-    pub fn base_url<'a>(&'a mut self, url: impl Into<String>) -> &'a ClientBuilder {
+    pub fn base_url(&mut self, url: impl Into<String>) -> &ClientBuilder {
         self.base_url = Some(url.into());
         self
     }

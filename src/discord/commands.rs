@@ -39,7 +39,7 @@ pub async fn load<'a>(
                 }
             }
 
-            return None;
+            None
         })
         .collect::<Vec<String>>();
     let _: () = redis_connection
@@ -74,13 +74,13 @@ pub async fn raffle(
     let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
     let mut redis_connection = redis_pool.get().await.unwrap();
     let size: usize = redis_connection.llen(redis_key).await.unwrap();
-    if size <= 0 {
+    if size == 0 {
         return command
             .create_interaction_response(&ctx.http, |response| {
                 response
                     .kind(InteractionResponseType::ChannelMessageWithSource)
                     .interaction_response_data(|message| {
-                        message.content(format!("No entries in the raffle."))
+                        message.content("No entries in the raffle.")
                     })
             })
             .await;
@@ -112,7 +112,7 @@ pub async fn clear(
         .create_interaction_response(&ctx.http, |response| {
             response
                 .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content(format!("Cleared list")))
+                .interaction_response_data(|message| message.content("Cleared list"))
         })
         .await
 }
