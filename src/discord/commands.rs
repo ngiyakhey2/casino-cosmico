@@ -131,17 +131,8 @@ pub async fn add(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
     redis_key: &str,
+    name: &str,
 ) -> serenity::Result<()> {
-    let name = match command
-        .data
-        .options
-        .get(0)
-        .and_then(|option| option.value.as_ref())
-        .and_then(|value| value.as_str())
-    {
-        Some(name) => name,
-        None => return Ok(()),
-    };
     let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
     let mut redis_connection = redis_pool.get().await.unwrap();
     let _: () = redis_connection.rpush(redis_key, name).await.unwrap();
