@@ -116,7 +116,22 @@ impl<'client> TicketsHandler<'client> {
         self
     }
 
+    /// Execute the request to fetch all tickets
     pub async fn send(&self) -> Result<Vec<Ticket>, reqwest::Error> {
+        let mut next_page = Some(1);
+        let mut tickets: Vec<Ticket> = Vec::new();
+        while let Some(page) = next_page {
+            let mut response = self.build(page).send().await?.json::<Tickets>().await?;
+
+            next_page = response.meta.next_page;
+            tickets.append(&mut response.tickets);
+        }
+
+        Ok(tickets)
+    }
+
+    /// Construct RequestBuilder for pagination. RequestBuilder doesn't support Clone.
+    fn build(&self, page: u32) -> reqwest::RequestBuilder {
         let mut request_builder = self.client.client.get(format!(
             "{}/{}/{}/tickets",
             self.client.base_url, self.account, self.event
@@ -174,8 +189,6 @@ impl<'client> TicketsHandler<'client> {
             }
         }
 
-        let response = request_builder.send().await?.json::<Tickets>().await?;
-
-        Ok(response.tickets)
+        request_builder.query(&[("page", page)])
     }
 }

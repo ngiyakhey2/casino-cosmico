@@ -25,6 +25,7 @@ use tracing::{error, info, instrument};
 const ACCOUNT_SLUG: &str = "con-of-heroes";
 const EVENT_SLUG: &str = "con-of-heroes";
 const EARLY_BIRD_TICKET_SLUG: &str = "con-of-the-rings-early-bird-ticket";
+const GENERAL_TICKET_SLUG: &str = "con-of-heroes-general-ticket";
 const REDIS_KEY: &str = "raffle";
 
 /// Setup and return an async redis pool
@@ -159,7 +160,7 @@ async fn match_subcommand(
                 account_slug: ACCOUNT_SLUG,
                 event_slug: EVENT_SLUG,
                 redis_key: REDIS_KEY,
-                ticket_slugs: [EARLY_BIRD_TICKET_SLUG]
+                ticket_slugs: [EARLY_BIRD_TICKET_SLUG, GENERAL_TICKET_SLUG]
                     .iter()
                     .map(|s| s.to_string())
                     .collect(),
