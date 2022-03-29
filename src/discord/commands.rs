@@ -7,16 +7,6 @@ use serenity::{
     },
 };
 
-pub async fn pong(ctx: &Context, command: &ApplicationCommandInteraction) -> serenity::Result<()> {
-    command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content("Pong"))
-        })
-        .await
-}
-
 pub struct LoadParams<'a> {
     pub account_slug: &'a str,
     pub event_slug: &'a str,

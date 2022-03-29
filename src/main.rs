@@ -10,7 +10,10 @@ use serenity::{
     client::{Context, EventHandler},
     model::{
         gateway::Ready,
-        interactions::{application_command::ApplicationCommandOptionType, Interaction},
+        interactions::{
+            application_command::{ApplicationCommandInteraction, ApplicationCommandOptionType},
+            Interaction,
+        },
         prelude::GuildId,
     },
     prelude::RwLock,
@@ -56,47 +59,43 @@ impl EventHandler for SlashHandler {
 
         let guild_id = type_map_keys::GuildId::get(&ctx.data).await;
         let commands = GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
-            commands
-                .create_application_command(|command| {
-                    command
-                        .name("raffle")
-                        .description("Raffle Subcommand")
-                        .create_option(|option| {
-                            option
-                                .name("pick")
-                                .description("Pick a winner")
-                                .kind(ApplicationCommandOptionType::SubCommand)
-                                .default_option(true)
-                        })
-                        .create_option(|option| {
-                            option
-                                .name("add")
-                                .description("Add an entry by hand")
-                                .kind(ApplicationCommandOptionType::SubCommand)
-                                .create_sub_option(|option| {
-                                    option
-                                        .name("name")
-                                        .description("Entry's Full Name")
-                                        .kind(ApplicationCommandOptionType::String)
-                                        .required(true)
-                                })
-                        })
-                        .create_option(|option| {
-                            option
-                                .name("clear")
-                                .description("Clear raffle list")
-                                .kind(ApplicationCommandOptionType::SubCommand)
-                        })
-                        .create_option(|option| {
-                            option
-                                .name("load")
-                                .description("Load tickets from tito")
-                                .kind(ApplicationCommandOptionType::SubCommand)
-                        })
-                })
-                .create_application_command(|command| {
-                    command.name("ping").description("A ping command")
-                })
+            commands.create_application_command(|command| {
+                command
+                    .name("raffle")
+                    .description("Raffle Subcommand")
+                    .create_option(|option| {
+                        option
+                            .name("pick")
+                            .description("Pick a winner")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .default_option(true)
+                    })
+                    .create_option(|option| {
+                        option
+                            .name("add")
+                            .description("Add an entry by hand")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .create_sub_option(|option| {
+                                option
+                                    .name("name")
+                                    .description("Entry's Full Name")
+                                    .kind(ApplicationCommandOptionType::String)
+                                    .required(true)
+                            })
+                    })
+                    .create_option(|option| {
+                        option
+                            .name("clear")
+                            .description("Clear raffle list")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                    })
+                    .create_option(|option| {
+                        option
+                            .name("load")
+                            .description("Load tickets from tito")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                    })
+            })
         })
         .await;
 
@@ -104,64 +103,70 @@ impl EventHandler for SlashHandler {
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        if let Interaction::ApplicationCommand(command) = interaction {
-            let result = match command.data.name.as_str() {
-                "ping" => commands::pong(&ctx, &command)
-                    .await
-                    .map_err(|err| err.into()),
-                "raffle" => {
-                    if let Some(sub_cmd) = command.data.options.get(0) {
-                        match sub_cmd.name.as_str() {
-                            "add" => {
-                                if let Some(name) = sub_cmd
-                                    .options
-                                    .get(0)
-                                    .and_then(|option| option.value.as_ref())
-                                    .and_then(|value| value.as_str())
-                                {
-                                    commands::add(&ctx, &command, REDIS_KEY, name)
-                                        .await
-                                        .map_err(|err| err.into())
-                                } else {
-                                    Err(SlashCommandError::MissingOption(
-                                        "add".into(),
-                                        "name".into(),
-                                    ))
-                                }
-                            }
-                            "clear" => commands::clear(&ctx, &command, REDIS_KEY)
-                                .await
-                                .map_err(|err| err.into()),
-                            "load" => {
-                                let load_params = commands::LoadParams {
-                                    account_slug: ACCOUNT_SLUG,
-                                    event_slug: EVENT_SLUG,
-                                    redis_key: REDIS_KEY,
-                                    ticket_slugs: [EARLY_BIRD_TICKET_SLUG]
-                                        .iter()
-                                        .map(|s| s.to_string())
-                                        .collect(),
-                                };
-                                commands::load(&ctx, &command, load_params)
-                                    .await
-                                    .map_err(|err| err.into())
-                            }
-                            "pick" => commands::raffle(&ctx, &command, REDIS_KEY)
-                                .await
-                                .map_err(|err| err.into()),
-                            _ => Err(SlashCommandError::UnknownSubCommand),
-                        }
-                    } else {
-                        Err(SlashCommandError::NoSubCommand)
-                    }
-                }
-                _ => Ok(()),
-            };
+        let command = match interaction.application_command() {
+            Some(c) => c,
+            None => return,
+        };
 
-            if let Err(err) = result {
-                eprintln!("Cannot respond to slash comamnd: {}", err);
+        if command.data.name.as_str() != "raffle" {
+            return;
+        }
+
+        if let Err(err) = match_subcommand(&ctx, &command).await {
+            eprintln!("Cannot respond to slash comamnd: {}", err);
+        }
+    }
+}
+
+/// Maps Slash Sub-Commands to function calls
+async fn match_subcommand(
+    ctx: &Context,
+    command: &ApplicationCommandInteraction,
+) -> Result<(), SlashCommandError> {
+    let sub_cmd = command
+        .data
+        .options
+        .get(0)
+        .ok_or(SlashCommandError::NoSubCommand)?;
+    match sub_cmd.name.as_str() {
+        "add" => {
+            if let Some(name) = sub_cmd
+                .options
+                .get(0)
+                .and_then(|option| option.value.as_ref())
+                .and_then(|value| value.as_str())
+            {
+                commands::add(ctx, command, REDIS_KEY, name)
+                    .await
+                    .map_err(|err| err.into())
+            } else {
+                Err(SlashCommandError::MissingOption(
+                    "add".into(),
+                    "name".into(),
+                ))
             }
         }
+        "clear" => commands::clear(ctx, command, REDIS_KEY)
+            .await
+            .map_err(|err| err.into()),
+        "load" => {
+            let load_params = commands::LoadParams {
+                account_slug: ACCOUNT_SLUG,
+                event_slug: EVENT_SLUG,
+                redis_key: REDIS_KEY,
+                ticket_slugs: [EARLY_BIRD_TICKET_SLUG]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            };
+            commands::load(ctx, command, load_params)
+                .await
+                .map_err(|err| err.into())
+        }
+        "pick" => commands::raffle(ctx, command, REDIS_KEY)
+            .await
+            .map_err(|err| err.into()),
+        _ => Err(SlashCommandError::UnknownSubCommand),
     }
 }
 
