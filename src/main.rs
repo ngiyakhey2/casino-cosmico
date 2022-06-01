@@ -23,7 +23,7 @@ use std::{env, sync::Arc};
 use tracing::{error, info, instrument};
 
 const ACCOUNT_SLUG: &str = "con-of-heroes";
-const EVENT_SLUG: &str = "con-of-heroes";
+const EVENT_SLUG: &str = "con-of-heroes-2022";
 const EARLY_BIRD_TICKET_SLUG: &str = "con-of-the-rings-early-bird-ticket";
 const GENERAL_TICKET_SLUG: &str = "con-of-heroes-general-ticket";
 const REDIS_KEY: &str = "raffle";
