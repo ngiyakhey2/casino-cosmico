@@ -3,10 +3,26 @@ use crate::tito::client::Client;
 use bb8_redis::RedisConnectionManager;
 use rand::Rng as Rand;
 use serenity::{
-    model::prelude::GuildId as SerenityGuildId,
+    model::{
+        id::{ChannelId as SerenityChannelId, UserId as SerenityUserId},
+        prelude::GuildId as SerenityGuildId,
+    },
     prelude::{RwLock, TypeMap, TypeMapKey},
 };
 use std::sync::Arc;
+
+pub struct ChannelId;
+
+impl TypeMapKey for ChannelId {
+    type Value = SerenityChannelId;
+}
+
+impl ChannelId {
+    pub async fn get(data: &Arc<RwLock<TypeMap>>) -> SerenityChannelId {
+        let data = data.read().await;
+        *data.get::<Self>().expect("Expected ChannelId in TypeMap")
+    }
+}
 
 pub struct GuildId;
 
@@ -18,6 +34,19 @@ impl GuildId {
     pub async fn get(data: &Arc<RwLock<TypeMap>>) -> SerenityGuildId {
         let data = data.read().await;
         *data.get::<Self>().expect("Expected GuildId in TypeMap")
+    }
+}
+
+pub struct UserId;
+
+impl TypeMapKey for UserId {
+    type Value = SerenityUserId;
+}
+
+impl UserId {
+    pub async fn get(data: &Arc<RwLock<TypeMap>>) -> SerenityUserId {
+        let data = data.read().await;
+        *data.get::<Self>().expect("Expected UserId in TypeMap")
     }
 }
 

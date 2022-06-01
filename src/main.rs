@@ -4,12 +4,17 @@ use casino_cosmico::{
     discord::{commands, type_map_keys},
     tito,
 };
+use lazy_static::lazy_static;
 use rand::SeedableRng;
+use regex::Regex;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
+    http::client::Http,
     model::{
-        gateway::Ready,
+        channel::{Reaction, ReactionType},
+        gateway::{GatewayIntents, Ready},
+        id::ChannelId,
         interactions::{
             application_command::{ApplicationCommandInteraction, ApplicationCommandOptionType},
             Interaction,
@@ -129,6 +134,37 @@ impl EventHandler for SlashHandler {
             error!("Cannot respond to slash comamnd: {}", err);
         }
     }
+
+    async fn reaction_add(&self, ctx: Context, reaction: Reaction) {
+        let channel_id = type_map_keys::ChannelId::get(&ctx.data).await;
+        let user_id = type_map_keys::UserId::get(&ctx.data).await;
+
+        if reaction.channel_id == channel_id {
+            let message = reaction.message(&ctx.http).await.unwrap();
+            if message.author.id == user_id {
+                if let ReactionType::Unicode(ref code) = reaction.emoji {
+                    if code == "👍" {
+                        lazy_static! {
+                            static ref RE: Regex =
+                                Regex::new(r"[*]{2}(?P<name>[^*]+)[*]{2}").unwrap();
+                        }
+
+                        let contents = message.content;
+                        if let Some(caps) = RE.captures(&contents) {
+                            let name = &caps["name"];
+                            commands::add_name(&ctx, REDIS_KEY, &name).await.unwrap();
+                            channel_id
+                                .send_message(&ctx.http, |m| {
+                                    m.content(format!("Re-adding **{name}**"))
+                                })
+                                .await
+                                .unwrap();
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Maps Slash Sub-Commands to function calls
@@ -213,13 +249,26 @@ async fn main() {
         .expect("Expected environment variable: DISCORD_APPLICATION_ID")
         .parse()
         .expect("application id is not a valid id");
+    let channel_id = ChannelId(
+        env::var("DISCORD_CHANNEL_ID")
+            .expect("Expected environment variable: DISCORD_CHANNEL_ID")
+            .parse()
+            .expect("channel id is not a valid id"),
+    );
     let connection = redis_pool(&redis_url).await.unwrap();
     let tito_client = tito::client::ClientBuilder::new(&tito_api_token)
         .expect("Could not build Tito HTTP Client")
         .build();
     let rng = Arc::new(RwLock::new(rand::rngs::StdRng::from_entropy()));
 
-    let mut client = serenity::Client::builder(discord_token)
+    let http = Http::new(&discord_token);
+    let bot_id = match http.get_current_user().await {
+        Ok(info) => info.id,
+        Err(why) => panic!("Could not access user info: {:?}", why),
+    };
+
+    let gateway_intents = GatewayIntents::GUILD_MESSAGE_REACTIONS;
+    let mut client = serenity::Client::builder(discord_token, gateway_intents)
         .application_id(application_id)
         .event_handler(SlashHandler)
         .await
@@ -227,7 +276,9 @@ async fn main() {
 
     {
         let mut data = client.data.write().await;
+        data.insert::<type_map_keys::ChannelId>(channel_id);
         data.insert::<type_map_keys::GuildId>(guild_id);
+        data.insert::<type_map_keys::UserId>(bot_id);
         data.insert::<type_map_keys::RedisPool>(connection);
         data.insert::<type_map_keys::TitoClient>(tito_client);
         data.insert::<type_map_keys::Rng>(rng);

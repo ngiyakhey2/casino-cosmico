@@ -179,9 +179,7 @@ pub async fn add(
     redis_key: &str,
     name: &str,
 ) -> serenity::Result<()> {
-    let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
-    let mut redis_connection = redis_pool.get().await.unwrap();
-    let _: () = redis_connection.rpush(redis_key, name).await.unwrap();
+    add_name(ctx, redis_key, name).await?;
 
     command
         .create_interaction_response(&ctx.http, |response| {
@@ -190,6 +188,15 @@ pub async fn add(
                 .interaction_response_data(|message| message.content(format!("Added {name}")))
         })
         .await
+}
+
+#[instrument(skip(ctx))]
+pub async fn add_name(ctx: &Context, redis_key: &str, name: &str) -> serenity::Result<()> {
+    let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
+    let mut redis_connection = redis_pool.get().await.unwrap();
+    let _: () = redis_connection.rpush(redis_key, name).await.unwrap();
+
+    Ok(())
 }
 
 #[instrument(skip(ctx))]
