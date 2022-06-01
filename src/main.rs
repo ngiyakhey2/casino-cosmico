@@ -70,6 +70,13 @@ impl EventHandler for SlashHandler {
                             .description("Pick a winner")
                             .kind(ApplicationCommandOptionType::SubCommand)
                             .default_option(true)
+                            .create_sub_option(|option| {
+                                option
+                                    .name("amount")
+                                    .description("Number of winners to pick")
+                                    .kind(ApplicationCommandOptionType::Integer)
+                                    .min_int_value(1)
+                            })
                     })
                     .create_option(|option| {
                         option
@@ -169,9 +176,17 @@ async fn match_subcommand(
                 .await
                 .map_err(|err| err.into())
         }
-        "pick" => commands::raffle(ctx, command, REDIS_KEY)
-            .await
-            .map_err(|err| err.into()),
+        "pick" => {
+            let amount = sub_cmd
+                .options
+                .get(0)
+                .and_then(|option| option.value.as_ref())
+                .and_then(|value| value.as_u64())
+                .unwrap_or(1);
+            commands::raffle(ctx, command, REDIS_KEY, amount)
+                .await
+                .map_err(|err| err.into())
+        }
         "size" => commands::size(ctx, command, REDIS_KEY)
             .await
             .map_err(|err| err.into()),

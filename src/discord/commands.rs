@@ -74,33 +74,84 @@ pub async fn raffle(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
     redis_key: &str,
+    amount: u64,
 ) -> serenity::Result<()> {
     let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
     let mut redis_connection = redis_pool.get().await.unwrap();
+
     let size: usize = redis_connection.llen(redis_key).await.unwrap();
+    let entries = std::cmp::min(size, amount as usize);
+
+    match entries {
+        0 => {
+            return command
+                .create_interaction_response(&ctx.http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| {
+                            message.content("No entries in the raffle.")
+                        })
+                })
+                .await;
+        }
+        1 => {
+            // will always return 1, since we check size before this
+            let winner = pick_winner(&redis_pool, redis_key, &ctx).await.unwrap();
+
+            command
+                .create_interaction_response(&ctx.http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| {
+                            message.content(format!("Winner is **{winner}**"))
+                        })
+                })
+                .await?;
+        }
+        _ => {
+            command
+                .create_interaction_response(&ctx.http, |response| {
+                    response
+                        .kind(InteractionResponseType::ChannelMessageWithSource)
+                        .interaction_response_data(|message| {
+                            message.content(format!("Found {entries} winners"))
+                        })
+                })
+                .await?;
+
+            for _ in 0..amount {
+                if let Some(winner) = pick_winner(&redis_pool, redis_key, &ctx).await {
+                    command
+                        .channel_id
+                        .send_message(&ctx.http, |m| m.content(format!("Winner: **{winner}**")))
+                        .await?;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn pick_winner(
+    redis_pool: &bb8::Pool<bb8_redis::RedisConnectionManager>,
+    redis_key: &str,
+    ctx: &Context,
+) -> Option<String> {
+    let mut redis_connection = redis_pool.get().await.unwrap();
+    let size: usize = redis_connection.llen(redis_key).await.unwrap();
+
     if size == 0 {
-        return command
-            .create_interaction_response(&ctx.http, |response| {
-                response
-                    .kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|message| {
-                        message.content("No entries in the raffle.")
-                    })
-            })
-            .await;
+        return None;
     }
 
     let index: isize = type_map_keys::Rng::rand(&ctx.data, size).await as isize;
     let winner: String = redis_connection.lindex(redis_key, index).await.unwrap();
     let _: () = redis_connection.lrem(redis_key, 1, &winner).await.unwrap();
 
-    command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content(format!("Winner is {winner}")))
-        })
-        .await
+    Some(winner)
 }
 
 #[instrument(skip(ctx))]
