@@ -83,30 +83,29 @@ pub async fn raffle(
     let entries = std::cmp::min(size, amount as usize);
 
     match entries {
-        0 => {
-            return command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|message| {
-                            message.content("No entries in the raffle.")
-                        })
-                })
-                .await;
-        }
-        1 => {
+        0..=1 => {
             // will always return 1, since we check size before this
-            let winner = pick_winner(&redis_pool, redis_key, &ctx).await.unwrap();
-
-            command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|message| {
-                            message.content(format!("Winner is **{winner}**"))
-                        })
-                })
-                .await?;
+            if let Some(winner) = pick_winner(&redis_pool, redis_key, ctx).await {
+                command
+                    .create_interaction_response(&ctx.http, |response| {
+                        response
+                            .kind(InteractionResponseType::ChannelMessageWithSource)
+                            .interaction_response_data(|message| {
+                                message.content(format!("Winner is **{winner}**"))
+                            })
+                    })
+                    .await?;
+            } else {
+                command
+                    .create_interaction_response(&ctx.http, |response| {
+                        response
+                            .kind(InteractionResponseType::ChannelMessageWithSource)
+                            .interaction_response_data(|message| {
+                                message.content("No entries in the raffle.")
+                            })
+                    })
+                    .await?;
+            }
         }
         _ => {
             command
@@ -120,7 +119,7 @@ pub async fn raffle(
                 .await?;
 
             for _ in 0..amount {
-                if let Some(winner) = pick_winner(&redis_pool, redis_key, &ctx).await {
+                if let Some(winner) = pick_winner(&redis_pool, redis_key, ctx).await {
                     command
                         .channel_id
                         .send_message(&ctx.http, |m| m.content(format!("Winner: **{winner}**")))
