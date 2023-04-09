@@ -29,7 +29,8 @@ use tracing::{error, info, instrument};
 
 const EARLY_BIRD_TICKET_SLUG: &str = "Con of Heroes Early Bird Ticket";
 const GENERAL_TICKET_SLUG: &str = "Con of Heroes General Ticket";
-const REDIS_KEY: &str = "raffle";
+const LOADED_REDIS_KEY: &str = "loaded";
+const RAFFLE_REDIS_KEY: &str = "raffle";
 
 /// Setup and return an async redis pool
 async fn redis_pool(redis_str: &str) -> Result<Pool<RedisConnectionManager>, redis::RedisError> {
@@ -150,7 +151,9 @@ impl EventHandler for SlashHandler {
                         let contents = message.content;
                         if let Some(caps) = RE.captures(&contents) {
                             let name = &caps["name"];
-                            commands::add_name(&ctx, REDIS_KEY, name).await.unwrap();
+                            commands::add_name(&ctx, LOADED_REDIS_KEY, RAFFLE_REDIS_KEY, name)
+                                .await
+                                .unwrap();
                             channel_id
                                 .send_message(&ctx.http, |m| {
                                     m.content(format!("Re-adding **{name}**"))
@@ -183,7 +186,7 @@ async fn match_subcommand(
                 .and_then(|option| option.value.as_ref())
                 .and_then(|value| value.as_str())
             {
-                commands::add(ctx, command, REDIS_KEY, name)
+                commands::add(ctx, command, LOADED_REDIS_KEY, RAFFLE_REDIS_KEY, name)
                     .await
                     .map_err(|err| err.into())
             } else {
@@ -193,13 +196,14 @@ async fn match_subcommand(
                 ))
             }
         }
-        "clear" => commands::clear(ctx, command, REDIS_KEY)
+        "clear" => commands::clear(ctx, command, LOADED_REDIS_KEY, RAFFLE_REDIS_KEY)
             .await
             .map_err(|err| err.into()),
         "load" => {
             let load_params = commands::LoadParams {
                 checkin_list_slug: &type_map_keys::CheckinListSlug::get(&ctx.data).await,
-                redis_key: REDIS_KEY,
+                loaded_redis_key: LOADED_REDIS_KEY,
+                raffle_redis_key: RAFFLE_REDIS_KEY,
                 ticket_slugs: [EARLY_BIRD_TICKET_SLUG, GENERAL_TICKET_SLUG]
                     .iter()
                     .map(|s| s.to_string())
@@ -216,11 +220,11 @@ async fn match_subcommand(
                 .and_then(|option| option.value.as_ref())
                 .and_then(|value| value.as_u64())
                 .unwrap_or(1);
-            commands::raffle(ctx, command, REDIS_KEY, amount)
+            commands::raffle(ctx, command, RAFFLE_REDIS_KEY, amount)
                 .await
                 .map_err(|err| err.into())
         }
-        "size" => commands::size(ctx, command, REDIS_KEY)
+        "size" => commands::size(ctx, command, RAFFLE_REDIS_KEY)
             .await
             .map_err(|err| err.into()),
         _ => Err(SlashCommandError::UnknownSubCommand),

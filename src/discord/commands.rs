@@ -1,4 +1,5 @@
 use crate::discord::type_map_keys;
+use crate::tito::checkin::client::Client;
 use bb8_redis::redis::AsyncCommands;
 use serenity::{
     client::Context,
@@ -12,7 +13,8 @@ use tracing::instrument;
 #[derive(Debug)]
 pub struct LoadParams<'a> {
     pub checkin_list_slug: &'a str,
-    pub redis_key: &'a str,
+    pub loaded_redis_key: &'a str,
+    pub raffle_redis_key: &'a str,
     pub ticket_slugs: Vec<String>,
 }
 
@@ -24,6 +26,25 @@ pub async fn load<'a>(
 ) -> serenity::Result<()> {
     let tito_client = type_map_keys::TitoClient::get(&ctx.data).await;
     let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
+
+    let (loaded, total) = load_names(&tito_client, &redis_pool, params).await?;
+
+    command
+        .create_interaction_response(&ctx.http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|message| {
+                    message.content(format!("Loaded {loaded} users\n{total} total users.",))
+                })
+        })
+        .await
+}
+
+async fn load_names<'a>(
+    tito_client: &Client,
+    redis_pool: &bb8::Pool<bb8_redis::RedisConnectionManager>,
+    params: LoadParams<'a>,
+) -> serenity::Result<(usize, usize)> {
     let mut redis_connection = redis_pool.get().await.unwrap();
 
     let tickets = tito_client
@@ -32,13 +53,20 @@ pub async fn load<'a>(
         .send()
         .await
         .unwrap();
+    let already_loaded: Vec<String> = redis_connection
+        .smembers(params.loaded_redis_key)
+        .await
+        .unwrap();
     let attendees = tickets
         .iter()
         .filter_map(|ticket| {
             if params.ticket_slugs.contains(&ticket.release_title) {
                 if let Some(first_name) = &ticket.first_name {
                     if let Some(last_name) = &ticket.last_name {
-                        return Some(format!("{first_name} {last_name}"));
+                        let name = format!("{first_name} {last_name}");
+                        if !already_loaded.contains(&name) {
+                            return Some(name);
+                        }
                     }
                 }
             }
@@ -48,27 +76,19 @@ pub async fn load<'a>(
         .collect::<Vec<String>>();
     let unique_attendees = HashSet::<String>::from_iter(attendees);
     let _: () = redis_connection
-        .rpush(params.redis_key, &unique_attendees)
+        .rpush(params.raffle_redis_key, &unique_attendees)
+        .await
+        .unwrap();
+    let _: () = redis_connection
+        .sadd(params.loaded_redis_key, &unique_attendees)
         .await
         .unwrap();
     let loaded: Vec<String> = redis_connection
-        .lrange(params.redis_key, 0, -1)
+        .lrange(params.raffle_redis_key, 0, -1)
         .await
         .unwrap();
 
-    command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| {
-                    message.content(format!(
-                        "Loaded {} users\n{} total users.",
-                        &unique_attendees.len(),
-                        &loaded.len()
-                    ))
-                })
-        })
-        .await
+    Ok((loaded.len(), unique_attendees.len()))
 }
 
 #[instrument(skip(ctx))]
@@ -138,19 +158,25 @@ pub async fn raffle(
 
 async fn pick_winner(
     redis_pool: &bb8::Pool<bb8_redis::RedisConnectionManager>,
-    redis_key: &str,
+    raffle_redis_key: &str,
     ctx: &Context,
 ) -> Option<String> {
     let mut redis_connection = redis_pool.get().await.unwrap();
-    let size: usize = redis_connection.llen(redis_key).await.unwrap();
+    let size: usize = redis_connection.llen(raffle_redis_key).await.unwrap();
 
     if size == 0 {
         return None;
     }
 
     let index: isize = type_map_keys::Rng::rand(&ctx.data, size).await as isize;
-    let winner: String = redis_connection.lindex(redis_key, index).await.unwrap();
-    let _: () = redis_connection.lrem(redis_key, 1, &winner).await.unwrap();
+    let winner: String = redis_connection
+        .lindex(raffle_redis_key, index)
+        .await
+        .unwrap();
+    let _: () = redis_connection
+        .lrem(raffle_redis_key, 1, &winner)
+        .await
+        .unwrap();
 
     Some(winner)
 }
@@ -159,11 +185,13 @@ async fn pick_winner(
 pub async fn clear(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
-    redis_key: &str,
+    loaded_redis_key: &str,
+    raffle_redis_key: &str,
 ) -> serenity::Result<()> {
     let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
     let mut redis_connection = redis_pool.get().await.unwrap();
-    let _: () = redis_connection.del(redis_key).await.unwrap();
+    let _: () = redis_connection.del(loaded_redis_key).await.unwrap();
+    let _: () = redis_connection.del(raffle_redis_key).await.unwrap();
 
     command
         .create_interaction_response(&ctx.http, |response| {
@@ -178,10 +206,11 @@ pub async fn clear(
 pub async fn add(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
-    redis_key: &str,
+    loaded_redis_key: &str,
+    raffle_redis_key: &str,
     name: &str,
 ) -> serenity::Result<()> {
-    add_name(ctx, redis_key, name).await?;
+    add_name(ctx, loaded_redis_key, raffle_redis_key, name).await?;
 
     command
         .create_interaction_response(&ctx.http, |response| {
@@ -193,10 +222,19 @@ pub async fn add(
 }
 
 #[instrument(skip(ctx))]
-pub async fn add_name(ctx: &Context, redis_key: &str, name: &str) -> serenity::Result<()> {
+pub async fn add_name(
+    ctx: &Context,
+    loaded_redis_key: &str,
+    raffle_redis_key: &str,
+    name: &str,
+) -> serenity::Result<()> {
     let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
     let mut redis_connection = redis_pool.get().await.unwrap();
-    let _: () = redis_connection.rpush(redis_key, name).await.unwrap();
+    let _: () = redis_connection.sadd(loaded_redis_key, name).await.unwrap();
+    let _: () = redis_connection
+        .rpush(raffle_redis_key, name)
+        .await
+        .unwrap();
 
     Ok(())
 }
@@ -205,11 +243,11 @@ pub async fn add_name(ctx: &Context, redis_key: &str, name: &str) -> serenity::R
 pub async fn size(
     ctx: &Context,
     command: &ApplicationCommandInteraction,
-    redis_key: &str,
+    raffle_redis_key: &str,
 ) -> serenity::Result<()> {
     let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
     let mut redis_connection = redis_pool.get().await.unwrap();
-    let size: usize = redis_connection.llen(redis_key).await.unwrap();
+    let size: usize = redis_connection.llen(raffle_redis_key).await.unwrap();
 
     command
         .create_interaction_response(&ctx.http, |response| {
