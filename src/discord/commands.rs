@@ -76,7 +76,7 @@ async fn load_names<'a>(
         .collect::<Vec<String>>();
     let unique_attendees = HashSet::<String>::from_iter(attendees);
     // this will error with an empty set
-    if unique_attendees.len() > 0 {
+    if !unique_attendees.is_empty() {
         let _: () = redis_connection
             .rpush(params.raffle_redis_key, &unique_attendees)
             .await
