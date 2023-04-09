@@ -75,14 +75,17 @@ async fn load_names<'a>(
         })
         .collect::<Vec<String>>();
     let unique_attendees = HashSet::<String>::from_iter(attendees);
-    let _: () = redis_connection
-        .rpush(params.raffle_redis_key, &unique_attendees)
-        .await
-        .unwrap();
-    let _: () = redis_connection
-        .sadd(params.loaded_redis_key, &unique_attendees)
-        .await
-        .unwrap();
+    // this will error with an empty set
+    if unique_attendees.len() > 0 {
+        let _: () = redis_connection
+            .rpush(params.raffle_redis_key, &unique_attendees)
+            .await
+            .unwrap();
+        let _: () = redis_connection
+            .sadd(params.loaded_redis_key, &unique_attendees)
+            .await
+            .unwrap();
+    }
     let loaded: Vec<String> = redis_connection
         .lrange(params.raffle_redis_key, 0, -1)
         .await
