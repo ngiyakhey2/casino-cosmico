@@ -1,4 +1,4 @@
-use crate::{discord::type_map_keys, tito};
+use crate::discord::type_map_keys;
 use bb8_redis::redis::AsyncCommands;
 use serenity::{
     client::Context,
@@ -10,8 +10,7 @@ use tracing::instrument;
 
 #[derive(Debug)]
 pub struct LoadParams<'a> {
-    pub account_slug: &'a str,
-    pub event_slug: &'a str,
+    pub checkin_list_slug: &'a str,
     pub redis_key: &'a str,
     pub ticket_slugs: Vec<String>,
 }
@@ -27,9 +26,8 @@ pub async fn load<'a>(
     let mut redis_connection = redis_pool.get().await.unwrap();
 
     let tickets = tito_client
-        .tickets(params.account_slug, params.event_slug)
-        .release_ids(params.ticket_slugs)
-        .states(vec![tito::admin::client::tickets_handler::State::Complete])
+        .check_ins(params.checkin_list_slug)
+        .tickets()
         .send()
         .await
         .unwrap();

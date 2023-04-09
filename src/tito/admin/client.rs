@@ -13,7 +13,7 @@ pub enum ClientBuilderError {
     BuilderError(#[from] reqwest::Error),
 }
 
-pub fn client(api_token: &str) -> Result<reqwest::Client, ClientBuilderError> {
+fn client(api_token: &str) -> Result<reqwest::Client, ClientBuilderError> {
     let mut headers = header::HeaderMap::new();
     let mut authorization = header::HeaderValue::from_str(&format!("Token token={api_token}"))?;
     authorization.set_sensitive(true);
@@ -28,7 +28,7 @@ pub fn client(api_token: &str) -> Result<reqwest::Client, ClientBuilderError> {
         .build()?)
 }
 
-/// Builder for construction a Tito API Client
+/// Builder for constructing Tito Admin API Client
 pub struct ClientBuilder {
     client: reqwest::Client,
     base_url: Option<String>,

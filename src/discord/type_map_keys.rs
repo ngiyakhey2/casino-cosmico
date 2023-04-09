@@ -1,5 +1,5 @@
 //! Collection of Serenity TypeMapKeys
-use crate::tito::admin::client::Client;
+use crate::tito::checkin::client::Client;
 use bb8_redis::RedisConnectionManager;
 use rand::Rng as Rand;
 use serenity::{
@@ -90,5 +90,19 @@ impl Rng {
 
         let mut rng = rng_lock.write().await;
         rng.gen_range(0..max)
+    }
+}
+
+pub struct CheckinListSlug;
+impl TypeMapKey for CheckinListSlug {
+    type Value = String;
+}
+
+impl CheckinListSlug {
+    pub async fn get(data: &Arc<RwLock<TypeMap>>) -> String {
+        let data = data.read().await;
+        data.get::<CheckinListSlug>()
+            .expect("Expected StringValue in TypeMap")
+            .clone()
     }
 }

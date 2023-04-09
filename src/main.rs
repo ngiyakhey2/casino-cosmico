@@ -27,10 +27,8 @@ use serenity::{
 use std::{env, sync::Arc};
 use tracing::{error, info, instrument};
 
-const ACCOUNT_SLUG: &str = "con-of-heroes";
-const EVENT_SLUG: &str = "con-of-heroes-2022";
-const EARLY_BIRD_TICKET_SLUG: &str = "con-of-the-rings-early-bird-ticket";
-const GENERAL_TICKET_SLUG: &str = "con-of-heroes-general-ticket";
+const EARLY_BIRD_TICKET_SLUG: &str = "Con of Heroes Early Bird Ticket";
+const GENERAL_TICKET_SLUG: &str = "Con of Heroes General Ticket";
 const REDIS_KEY: &str = "raffle";
 
 /// Setup and return an async redis pool
@@ -200,8 +198,7 @@ async fn match_subcommand(
             .map_err(|err| err.into()),
         "load" => {
             let load_params = commands::LoadParams {
-                account_slug: ACCOUNT_SLUG,
-                event_slug: EVENT_SLUG,
+                checkin_list_slug: &type_map_keys::CheckinListSlug::get(&ctx.data).await,
                 redis_key: REDIS_KEY,
                 ticket_slugs: [EARLY_BIRD_TICKET_SLUG, GENERAL_TICKET_SLUG]
                     .iter()
@@ -235,8 +232,8 @@ async fn match_subcommand(
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let tito_api_token =
-        env::var("TITO_API_TOKEN").expect("Expected environment variable: TITO_API_TOKEN");
+    let checkin_list_slug =
+        env::var("CHECKIN_LIST_SLUG").expect("Expected env variable: CHECKIN_LIST_SLUG");
     let redis_url = env::var("REDIS_TLS_URL").expect("Expected env variable: REDIS_TLS_URL");
     let discord_token = env::var("DISCORD_TOKEN").expect("Expected env variable: DISCORD_TOKEN");
     let guild_id = GuildId(
@@ -256,7 +253,7 @@ async fn main() {
             .expect("channel id is not a valid id"),
     );
     let connection = redis_pool(&redis_url).await.unwrap();
-    let tito_client = tito::admin::client::ClientBuilder::new(&tito_api_token)
+    let tito_client = tito::checkin::client::ClientBuilder::new()
         .expect("Could not build Tito HTTP Client")
         .build();
     let rng = Arc::new(RwLock::new(rand::rngs::StdRng::from_entropy()));
@@ -276,6 +273,7 @@ async fn main() {
 
     {
         let mut data = client.data.write().await;
+        data.insert::<type_map_keys::CheckinListSlug>(checkin_list_slug);
         data.insert::<type_map_keys::ChannelId>(channel_id);
         data.insert::<type_map_keys::GuildId>(guild_id);
         data.insert::<type_map_keys::UserId>(bot_id);

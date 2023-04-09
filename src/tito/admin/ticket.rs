@@ -30,8 +30,8 @@ pub struct Ticket {
     pub consented_at: Option<DateTime<Utc>>,
     pub discounted_code_used: Option<String>,
     pub tag_names: Vec<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn ticket_deserializes() {
         let ticket: Result<Ticket, _> =
-            serde_json::from_str(include_str!("../../../fixtures/ticket.json"));
+            serde_json::from_str(include_str!("../../../fixtures/admin/ticket.json"));
 
         assert!(ticket.is_ok());
     }
