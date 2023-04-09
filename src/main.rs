@@ -12,13 +12,13 @@ use serenity::{
     client::{Context, EventHandler},
     http::client::Http,
     model::{
+        application::{
+            command::CommandOptionType,
+            interaction::{application_command::ApplicationCommandInteraction, Interaction},
+        },
         channel::{Reaction, ReactionType},
         gateway::{GatewayIntents, Ready},
         id::ChannelId,
-        interactions::{
-            application_command::{ApplicationCommandInteraction, ApplicationCommandOptionType},
-            Interaction,
-        },
         prelude::GuildId,
     },
     prelude::RwLock,
@@ -73,13 +73,13 @@ impl EventHandler for SlashHandler {
                         option
                             .name("pick")
                             .description("Pick a winner")
-                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .kind(CommandOptionType::SubCommand)
                             .default_option(true)
                             .create_sub_option(|option| {
                                 option
                                     .name("amount")
                                     .description("Number of winners to pick")
-                                    .kind(ApplicationCommandOptionType::Integer)
+                                    .kind(CommandOptionType::Integer)
                                     .min_int_value(1)
                             })
                     })
@@ -87,12 +87,12 @@ impl EventHandler for SlashHandler {
                         option
                             .name("add")
                             .description("Add an entry by hand")
-                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .kind(CommandOptionType::SubCommand)
                             .create_sub_option(|option| {
                                 option
                                     .name("name")
                                     .description("Entry's Full Name")
-                                    .kind(ApplicationCommandOptionType::String)
+                                    .kind(CommandOptionType::String)
                                     .required(true)
                             })
                     })
@@ -100,19 +100,19 @@ impl EventHandler for SlashHandler {
                         option
                             .name("clear")
                             .description("Clear raffle list")
-                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .kind(CommandOptionType::SubCommand)
                     })
                     .create_option(|option| {
                         option
                             .name("load")
                             .description("Load tickets from tito")
-                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .kind(CommandOptionType::SubCommand)
                     })
                     .create_option(|option| {
                         option
                             .name("size")
                             .description("Number of entries in the raffle")
-                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .kind(CommandOptionType::SubCommand)
                     })
             })
         })

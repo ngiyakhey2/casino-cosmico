@@ -2,7 +2,7 @@ use crate::{discord::type_map_keys, tito};
 use bb8_redis::redis::AsyncCommands;
 use serenity::{
     client::Context,
-    model::interactions::{
+    model::application::interaction::{
         application_command::ApplicationCommandInteraction, InteractionResponseType,
     },
 };
