@@ -6,6 +6,7 @@ use serenity::{
         application_command::ApplicationCommandInteraction, InteractionResponseType,
     },
 };
+use std::collections::HashSet;
 use tracing::instrument;
 
 #[derive(Debug)]
@@ -34,17 +35,20 @@ pub async fn load<'a>(
     let attendees = tickets
         .iter()
         .filter_map(|ticket| {
-            if let Some(first_name) = &ticket.first_name {
-                if let Some(last_name) = &ticket.last_name {
-                    return Some(format!("{first_name} {last_name}"));
+            if params.ticket_slugs.contains(&ticket.release_title) {
+                if let Some(first_name) = &ticket.first_name {
+                    if let Some(last_name) = &ticket.last_name {
+                        return Some(format!("{first_name} {last_name}"));
+                    }
                 }
             }
 
             None
         })
         .collect::<Vec<String>>();
+    let unique_attendees = HashSet::<String>::from_iter(attendees);
     let _: () = redis_connection
-        .rpush(params.redis_key, &attendees)
+        .rpush(params.redis_key, &unique_attendees)
         .await
         .unwrap();
     let loaded: Vec<String> = redis_connection
@@ -59,7 +63,7 @@ pub async fn load<'a>(
                 .interaction_response_data(|message| {
                     message.content(format!(
                         "Loaded {} users\n{} total users.",
-                        &attendees.len(),
+                        &unique_attendees.len(),
                         &loaded.len()
                     ))
                 })
