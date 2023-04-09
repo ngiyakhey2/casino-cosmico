@@ -150,7 +150,7 @@ impl EventHandler for SlashHandler {
                         let contents = message.content;
                         if let Some(caps) = RE.captures(&contents) {
                             let name = &caps["name"];
-                            commands::add_name(&ctx, REDIS_KEY, &name).await.unwrap();
+                            commands::add_name(&ctx, REDIS_KEY, name).await.unwrap();
                             channel_id
                                 .send_message(&ctx.http, |m| {
                                     m.content(format!("Re-adding **{name}**"))

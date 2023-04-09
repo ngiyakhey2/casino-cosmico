@@ -55,13 +55,11 @@ impl<'a> TicketsHandler<'a> {
     }
 
     fn build(&self) -> reqwest::RequestBuilder {
-        let request_builder = self.checkin_lists_handler.client.client.get(format!(
+        self.checkin_lists_handler.client.client.get(format!(
             "{}/checkin_lists/{}/tickets",
             self.checkin_lists_handler.client.base_url,
             self.checkin_lists_handler.checkin_list_slug
-        ));
-
-        request_builder
+        ))
     }
 }
 
