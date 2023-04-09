@@ -91,7 +91,7 @@ async fn load_names<'a>(
         .await
         .unwrap();
 
-    Ok((loaded.len(), unique_attendees.len()))
+    Ok((unique_attendees.len(), loaded.len()))
 }
 
 #[instrument(skip(ctx))]
