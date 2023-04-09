@@ -1,4 +1,4 @@
-use crate::tito::meta::Meta;
+use crate::tito::admin::meta::Meta;
 use chrono::{offset::Utc, DateTime};
 use serde::Deserialize;
 
@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn ticket_deserializes() {
         let ticket: Result<Ticket, _> =
-            serde_json::from_str(include_str!("../../fixtures/ticket.json"));
+            serde_json::from_str(include_str!("../../../fixtures/ticket.json"));
 
         assert!(ticket.is_ok());
     }

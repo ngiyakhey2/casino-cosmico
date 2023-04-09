@@ -1,4 +1,4 @@
-use crate::tito::{
+use crate::tito::admin::{
     client::Client,
     ticket::{Ticket, Tickets},
 };

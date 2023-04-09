@@ -1,5 +1,5 @@
 //! Collection of Serenity TypeMapKeys
-use crate::tito::client::Client;
+use crate::tito::admin::client::Client;
 use bb8_redis::RedisConnectionManager;
 use rand::Rng as Rand;
 use serenity::{

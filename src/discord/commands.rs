@@ -29,7 +29,7 @@ pub async fn load<'a>(
     let tickets = tito_client
         .tickets(params.account_slug, params.event_slug)
         .release_ids(params.ticket_slugs)
-        .states(vec![tito::client::tickets_handler::State::Complete])
+        .states(vec![tito::admin::client::tickets_handler::State::Complete])
         .send()
         .await
         .unwrap();

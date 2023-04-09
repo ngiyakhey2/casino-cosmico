@@ -256,7 +256,7 @@ async fn main() {
             .expect("channel id is not a valid id"),
     );
     let connection = redis_pool(&redis_url).await.unwrap();
-    let tito_client = tito::client::ClientBuilder::new(&tito_api_token)
+    let tito_client = tito::admin::client::ClientBuilder::new(&tito_api_token)
         .expect("Could not build Tito HTTP Client")
         .build();
     let rng = Arc::new(RwLock::new(rand::rngs::StdRng::from_entropy()));
