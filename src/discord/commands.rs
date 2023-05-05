@@ -59,6 +59,8 @@ async fn load_names<'a>(
     )
     .await
     .unwrap();
+    let checkins_hash: HashSet<u32> =
+        HashSet::from_iter(checkins.iter().map(|checkin| checkin.ticket_id));
 
     let already_loaded: Vec<String> = redis_connection
         .smembers(params.loaded_redis_key)
@@ -68,10 +70,7 @@ async fn load_names<'a>(
         .iter()
         .filter_map(|ticket| {
             if params.ticket_slugs.contains(&ticket.release_title)
-                && checkins
-                    .iter()
-                    .find(|checkin| checkin.ticket_id == ticket.id)
-                    .is_some()
+                && checkins_hash.get(&ticket.id).is_some()
             {
                 if let Some(first_name) = &ticket.first_name {
                     if let Some(last_name) = &ticket.last_name {
