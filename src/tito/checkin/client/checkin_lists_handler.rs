@@ -18,6 +18,10 @@ impl<'client> CheckinListsHandler<'client> {
     pub fn tickets(&'client self) -> TicketsHandler<'client> {
         TicketsHandler::new(self)
     }
+
+    pub fn checkins(&'client self) -> CheckinsHandler<'client> {
+        CheckinsHandler::new(self)
+    }
 }
 
 #[derive(Deserialize)]
@@ -63,6 +67,42 @@ impl<'a> TicketsHandler<'a> {
     }
 }
 
+pub struct CheckinsHandler<'a> {
+    checkin_lists_handler: &'a CheckinListsHandler<'a>,
+}
+
+impl<'a> CheckinsHandler<'a> {
+    pub(crate) fn new(checkin_lists_handler: &'a CheckinListsHandler) -> Self {
+        Self {
+            checkin_lists_handler,
+        }
+    }
+
+    pub async fn send(&self) -> Result<Vec<Checkin>, reqwest::Error> {
+        let response = self.build().send().await?.json::<Vec<Checkin>>().await?;
+
+        Ok(response)
+    }
+
+    fn build(&self) -> reqwest::RequestBuilder {
+        self.checkin_lists_handler.client.client.get(format!(
+            "{}/checkin_lists/{}/checkins",
+            self.checkin_lists_handler.client.base_url,
+            self.checkin_lists_handler.checkin_list_slug
+        ))
+    }
+}
+
+#[derive(Deserialize)]
+pub struct Checkin {
+    pub id: u32,
+    pub uuid: String,
+    pub ticket_id: u32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,5 +113,13 @@ mod tests {
             serde_json::from_str(include_str!("../../../../fixtures/checkin/ticket.json"));
 
         assert!(ticket.is_ok());
+    }
+
+    #[test]
+    fn checkin_deserialize() {
+        let checkin: Result<Checkin, _> =
+            serde_json::from_str(include_str!("../../../../fixtures/checkin/checkin.json"));
+
+        assert!(checkin.is_ok());
     }
 }

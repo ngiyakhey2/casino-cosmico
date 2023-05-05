@@ -47,12 +47,19 @@ async fn load_names<'a>(
 ) -> serenity::Result<(usize, usize)> {
     let mut redis_connection = redis_pool.get().await.unwrap();
 
-    let tickets = tito_client
-        .check_ins(params.checkin_list_slug)
-        .tickets()
-        .send()
-        .await
-        .unwrap();
+    let (checkins, tickets) = futures::future::try_join(
+        tito_client
+            .check_ins(params.checkin_list_slug)
+            .checkins()
+            .send(),
+        tito_client
+            .check_ins(params.checkin_list_slug)
+            .tickets()
+            .send(),
+    )
+    .await
+    .unwrap();
+
     let already_loaded: Vec<String> = redis_connection
         .smembers(params.loaded_redis_key)
         .await
@@ -60,7 +67,12 @@ async fn load_names<'a>(
     let attendees = tickets
         .iter()
         .filter_map(|ticket| {
-            if params.ticket_slugs.contains(&ticket.release_title) {
+            if params.ticket_slugs.contains(&ticket.release_title)
+                && checkins
+                    .iter()
+                    .find(|checkin| checkin.ticket_id == ticket.id)
+                    .is_some()
+            {
                 if let Some(first_name) = &ticket.first_name {
                     if let Some(last_name) = &ticket.last_name {
                         let name = format!("{first_name} {last_name}");
