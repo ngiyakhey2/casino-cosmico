@@ -30,6 +30,7 @@ use tracing::{error, info, instrument};
 const EARLY_BIRD_TICKET_SLUG: &str = "Con of Heroes 2023 Early Bird Ticket";
 const GENERAL_TICKET_SLUG: &str = "Con of heroes 2023 General Ticket";
 const NO_SWAG_TICKET_SLUG: &str = "No-SWAG ticket";
+const TICKET_SPOOFER_SLUG: &str = "Ticket spoofer";
 const LOADED_REDIS_KEY: &str = "loaded";
 const RAFFLE_REDIS_KEY: &str = "raffle";
 
@@ -209,6 +210,7 @@ async fn match_subcommand(
                     EARLY_BIRD_TICKET_SLUG,
                     GENERAL_TICKET_SLUG,
                     NO_SWAG_TICKET_SLUG,
+                    TICKET_SPOOFER_SLUG,
                 ]
                 .iter()
                 .map(|s| s.to_string())
