@@ -2,10 +2,9 @@ use crate::discord::type_map_keys;
 use crate::tito::checkin::client::Client;
 use bb8_redis::redis::AsyncCommands;
 use serenity::{
+    builder::{CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage},
     client::Context,
-    model::application::interaction::{
-        application_command::ApplicationCommandInteraction, InteractionResponseType,
-    },
+    model::application::CommandInteraction,
 };
 use std::collections::HashSet;
 use tracing::instrument;
@@ -21,7 +20,7 @@ pub struct LoadParams<'a> {
 #[instrument(skip(ctx))]
 pub async fn load<'a>(
     ctx: &Context,
-    command: &ApplicationCommandInteraction,
+    command: &CommandInteraction,
     params: LoadParams<'a>,
 ) -> serenity::Result<()> {
     let tito_client = type_map_keys::TitoClient::get(&ctx.data).await;
@@ -30,13 +29,13 @@ pub async fn load<'a>(
     let (loaded, total) = load_names(&tito_client, &redis_pool, params).await?;
 
     command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| {
-                    message.content(format!("Loaded {loaded} users\n{total} total users.",))
-                })
-        })
+        .create_response(
+            &ctx.http,
+            CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content(format!("Loaded {loaded} users\n{total} total users.",)),
+            ),
+        )
         .await
 }
 
@@ -108,7 +107,7 @@ async fn load_names<'a>(
 #[instrument(skip(ctx))]
 pub async fn raffle(
     ctx: &Context,
-    command: &ApplicationCommandInteraction,
+    command: &CommandInteraction,
     redis_key: &str,
     amount: u64,
 ) -> serenity::Result<()> {
@@ -123,42 +122,45 @@ pub async fn raffle(
             // will always return 1, since we check size before this
             if let Some(winner) = pick_winner(&redis_pool, redis_key, ctx).await {
                 command
-                    .create_interaction_response(&ctx.http, |response| {
-                        response
-                            .kind(InteractionResponseType::ChannelMessageWithSource)
-                            .interaction_response_data(|message| {
-                                message.content(format!("Winner is **{winner}**"))
-                            })
-                    })
+                    .create_response(
+                        &ctx.http,
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new()
+                                .content(format!("Winner is **{winner}**")),
+                        ),
+                    )
                     .await?;
             } else {
                 command
-                    .create_interaction_response(&ctx.http, |response| {
-                        response
-                            .kind(InteractionResponseType::ChannelMessageWithSource)
-                            .interaction_response_data(|message| {
-                                message.content("No entries in the raffle.")
-                            })
-                    })
+                    .create_response(
+                        &ctx.http,
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new()
+                                .content("No entries in the raffle."),
+                        ),
+                    )
                     .await?;
             }
         }
         _ => {
             command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|message| {
-                            message.content(format!("Found {entries} winners"))
-                        })
-                })
+                .create_response(
+                    &ctx.http,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content(format!("Found {entries} winners")),
+                    ),
+                )
                 .await?;
 
             for _ in 0..amount {
                 if let Some(winner) = pick_winner(&redis_pool, redis_key, ctx).await {
                     command
                         .channel_id
-                        .send_message(&ctx.http, |m| m.content(format!("Winner: **{winner}**")))
+                        .send_message(
+                            &ctx.http,
+                            CreateMessage::new().content(format!("Winner: **{winner}**")),
+                        )
                         .await?;
                 } else {
                     break;
@@ -198,7 +200,7 @@ async fn pick_winner(
 #[instrument(skip(ctx))]
 pub async fn clear(
     ctx: &Context,
-    command: &ApplicationCommandInteraction,
+    command: &CommandInteraction,
     loaded_redis_key: &str,
     raffle_redis_key: &str,
 ) -> serenity::Result<()> {
@@ -208,18 +210,19 @@ pub async fn clear(
     let _: () = redis_connection.del(raffle_redis_key).await.unwrap();
 
     command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content("Cleared list"))
-        })
+        .create_response(
+            &ctx.http,
+            CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new().content("Cleared list"),
+            ),
+        )
         .await
 }
 
 #[instrument(skip(ctx))]
 pub async fn add(
     ctx: &Context,
-    command: &ApplicationCommandInteraction,
+    command: &CommandInteraction,
     loaded_redis_key: &str,
     raffle_redis_key: &str,
     name: &str,
@@ -227,11 +230,12 @@ pub async fn add(
     add_name(ctx, loaded_redis_key, raffle_redis_key, name).await?;
 
     command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| message.content(format!("Added {name}")))
-        })
+        .create_response(
+            &ctx.http,
+            CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new().content(format!("Added {name}")),
+            ),
+        )
         .await
 }
 
@@ -256,7 +260,7 @@ pub async fn add_name(
 #[instrument(skip(ctx))]
 pub async fn size(
     ctx: &Context,
-    command: &ApplicationCommandInteraction,
+    command: &CommandInteraction,
     raffle_redis_key: &str,
 ) -> serenity::Result<()> {
     let redis_pool = type_map_keys::RedisPool::get(&ctx.data).await;
@@ -264,12 +268,12 @@ pub async fn size(
     let size: usize = redis_connection.llen(raffle_redis_key).await.unwrap();
 
     command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|message| {
-                    message.content(format!("{size} entries in the raffle"))
-                })
-        })
+        .create_response(
+            &ctx.http,
+            CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content(format!("{size} entries in the raffle")),
+            ),
+        )
         .await
 }

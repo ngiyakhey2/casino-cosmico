@@ -9,17 +9,14 @@ use rand::SeedableRng;
 use regex::Regex;
 use serenity::{
     async_trait,
+    builder::{CreateCommand, CreateCommandOption, CreateMessage},
     client::{Context, EventHandler},
-    http::client::Http,
+    http::Http,
     model::{
-        application::{
-            command::CommandOptionType,
-            interaction::{application_command::ApplicationCommandInteraction, Interaction},
-        },
+        application::{CommandDataOptionValue, CommandInteraction, CommandOptionType, Interaction},
         channel::{Reaction, ReactionType},
         gateway::{GatewayIntents, Ready},
-        id::ChannelId,
-        prelude::GuildId,
+        id::{ApplicationId, ChannelId, GuildId},
     },
     prelude::RwLock,
     Error as SerenityError,
@@ -65,74 +62,70 @@ impl EventHandler for SlashHandler {
         info!("{} is connected!", ready.user.name);
 
         let guild_id = type_map_keys::GuildId::get(&ctx.data).await;
-        GuildId::set_application_commands(&guild_id, &ctx.http, |commands| {
-            commands.create_application_command(|command| {
-                command
-                    .name("raffle")
+        guild_id
+            .create_command(
+                &ctx.http,
+                CreateCommand::new("raffle")
                     .description("Raffle Subcommand")
-                    .create_option(|option| {
-                        option
-                            .name("pick")
-                            .description("Pick a winner")
-                            .kind(CommandOptionType::SubCommand)
-                            .default_option(true)
-                            .create_sub_option(|option| {
-                                option
-                                    .name("amount")
-                                    .description("Number of winners to pick")
-                                    .kind(CommandOptionType::Integer)
-                                    .min_int_value(1)
-                            })
-                    })
-                    .create_option(|option| {
-                        option
-                            .name("add")
-                            .description("Add an entry by hand")
-                            .kind(CommandOptionType::SubCommand)
-                            .create_sub_option(|option| {
-                                option
-                                    .name("name")
-                                    .description("Entry's Full Name")
-                                    .kind(CommandOptionType::String)
-                                    .required(true)
-                            })
-                    })
-                    .create_option(|option| {
-                        option
-                            .name("clear")
-                            .description("Clear raffle list")
-                            .kind(CommandOptionType::SubCommand)
-                    })
-                    .create_option(|option| {
-                        option
-                            .name("load")
-                            .description("Load tickets from tito")
-                            .kind(CommandOptionType::SubCommand)
-                    })
-                    .create_option(|option| {
-                        option
-                            .name("size")
-                            .description("Number of entries in the raffle")
-                            .kind(CommandOptionType::SubCommand)
-                    })
-            })
-        })
-        .await
-        .unwrap();
+                    .add_option(
+                        CreateCommandOption::new(
+                            CommandOptionType::SubCommand,
+                            "pick",
+                            "Pick a winner",
+                        )
+                        .add_sub_option(
+                            CreateCommandOption::new(
+                                CommandOptionType::Integer,
+                                "amount",
+                                "Number of winners to pick",
+                            )
+                            .min_int_value(1),
+                        ),
+                    )
+                    .add_option(
+                        CreateCommandOption::new(
+                            CommandOptionType::SubCommand,
+                            "add",
+                            "Add an entry by hand",
+                        )
+                        .add_sub_option(
+                            CreateCommandOption::new(
+                                CommandOptionType::String,
+                                "name",
+                                "Entry's Full Name",
+                            )
+                            .required(true),
+                        ),
+                    )
+                    .add_option(CreateCommandOption::new(
+                        CommandOptionType::SubCommand,
+                        "clear",
+                        "Clear raffle list",
+                    ))
+                    .add_option(CreateCommandOption::new(
+                        CommandOptionType::SubCommand,
+                        "load",
+                        "Load tickets from tito",
+                    ))
+                    .add_option(CreateCommandOption::new(
+                        CommandOptionType::SubCommand,
+                        "size",
+                        "Number of entries in the raffle",
+                    )),
+            )
+            .await
+            .unwrap();
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        let command = match interaction.application_command() {
-            Some(c) => c,
-            None => return,
-        };
+        if let Interaction::Command(command) = interaction {
+            if command.data.name.as_str() != "raffle" {
+                return;
+            }
 
-        if command.data.name.as_str() != "raffle" {
-            return;
-        }
-
-        if let Err(err) = match_subcommand(&ctx, &command).await {
-            error!("Cannot respond to slash comamnd: {}", err);
+            if let Err(err) = match_subcommand(&ctx, &command).await {
+                error!("Cannot respond to slash comamnd: {}", err);
+            }
         }
     }
 
@@ -157,9 +150,10 @@ impl EventHandler for SlashHandler {
                                 .await
                                 .unwrap();
                             channel_id
-                                .send_message(&ctx.http, |m| {
-                                    m.content(format!("Re-adding **{name}**"))
-                                })
+                                .send_message(
+                                    &ctx.http,
+                                    CreateMessage::new().content(format!("Re-adding **{name}**")),
+                                )
                                 .await
                                 .unwrap();
                         }
@@ -173,68 +167,76 @@ impl EventHandler for SlashHandler {
 /// Maps Slash Sub-Commands to function calls
 async fn match_subcommand(
     ctx: &Context,
-    command: &ApplicationCommandInteraction,
+    command: &CommandInteraction,
 ) -> Result<(), SlashCommandError> {
     let sub_cmd = command
         .data
         .options
         .get(0)
         .ok_or(SlashCommandError::NoSubCommand)?;
-    match sub_cmd.name.as_str() {
-        "add" => {
-            if let Some(name) = sub_cmd
-                .options
-                .get(0)
-                .and_then(|option| option.value.as_ref())
-                .and_then(|value| value.as_str())
-            {
-                commands::add(ctx, command, LOADED_REDIS_KEY, RAFFLE_REDIS_KEY, name)
-                    .await
-                    .map_err(|err| err.into())
-            } else {
+    if let CommandDataOptionValue::SubCommand(options) = &sub_cmd.value {
+        match sub_cmd.name.as_str() {
+            "add" => {
+                if let Some(option) = options.get(0) {
+                    if let CommandDataOptionValue::String(name) = &option.value {
+                        return commands::add(
+                            ctx,
+                            command,
+                            LOADED_REDIS_KEY,
+                            RAFFLE_REDIS_KEY,
+                            name,
+                        )
+                        .await
+                        .map_err(|err| err.into());
+                    }
+                }
+
                 Err(SlashCommandError::MissingOption(
                     "add".into(),
                     "name".into(),
                 ))
             }
-        }
-        "clear" => commands::clear(ctx, command, LOADED_REDIS_KEY, RAFFLE_REDIS_KEY)
-            .await
-            .map_err(|err| err.into()),
-        "load" => {
-            let load_params = commands::LoadParams {
-                checkin_list_slug: &type_map_keys::CheckinListSlug::get(&ctx.data).await,
-                loaded_redis_key: LOADED_REDIS_KEY,
-                raffle_redis_key: RAFFLE_REDIS_KEY,
-                ticket_slugs: [
-                    EARLY_BIRD_TICKET_SLUG,
-                    GENERAL_TICKET_SLUG,
-                    NO_SWAG_TICKET_SLUG,
-                    TICKET_SPOOFER_SLUG,
-                ]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-            };
-            commands::load(ctx, command, load_params)
+            "clear" => commands::clear(ctx, command, LOADED_REDIS_KEY, RAFFLE_REDIS_KEY)
                 .await
-                .map_err(|err| err.into())
-        }
-        "pick" => {
-            let amount = sub_cmd
-                .options
-                .get(0)
-                .and_then(|option| option.value.as_ref())
-                .and_then(|value| value.as_u64())
-                .unwrap_or(1);
-            commands::raffle(ctx, command, RAFFLE_REDIS_KEY, amount)
+                .map_err(|err| err.into()),
+            "load" => {
+                let load_params = commands::LoadParams {
+                    checkin_list_slug: &type_map_keys::CheckinListSlug::get(&ctx.data).await,
+                    loaded_redis_key: LOADED_REDIS_KEY,
+                    raffle_redis_key: RAFFLE_REDIS_KEY,
+                    ticket_slugs: [
+                        EARLY_BIRD_TICKET_SLUG,
+                        GENERAL_TICKET_SLUG,
+                        NO_SWAG_TICKET_SLUG,
+                        TICKET_SPOOFER_SLUG,
+                    ]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                };
+                commands::load(ctx, command, load_params)
+                    .await
+                    .map_err(|err| err.into())
+            }
+            "pick" => {
+                let amount: u64 = *options
+                    .get(0)
+                    .map(|option| match &option.value {
+                        CommandDataOptionValue::Integer(i) => Ok(i),
+                        _ => Err(SlashCommandError::UnknownSubCommand),
+                    })
+                    .unwrap_or(Ok(&1))? as u64;
+                commands::raffle(ctx, command, RAFFLE_REDIS_KEY, amount)
+                    .await
+                    .map_err(|err| err.into())
+            }
+            "size" => commands::size(ctx, command, RAFFLE_REDIS_KEY)
                 .await
-                .map_err(|err| err.into())
+                .map_err(|err| err.into()),
+            _ => Err(SlashCommandError::UnknownSubCommand),
         }
-        "size" => commands::size(ctx, command, RAFFLE_REDIS_KEY)
-            .await
-            .map_err(|err| err.into()),
-        _ => Err(SlashCommandError::UnknownSubCommand),
+    } else {
+        Err(SlashCommandError::UnknownSubCommand)
     }
 }
 
@@ -247,17 +249,19 @@ async fn main() {
         env::var("CHECKIN_LIST_SLUG").expect("Expected env variable: CHECKIN_LIST_SLUG");
     let redis_url = env::var("REDIS_TLS_URL").expect("Expected env variable: REDIS_TLS_URL");
     let discord_token = env::var("DISCORD_TOKEN").expect("Expected env variable: DISCORD_TOKEN");
-    let guild_id = GuildId(
+    let guild_id = GuildId::new(
         env::var("DISCORD_GUILD_ID")
             .expect("Expected env variable: DISCORD_GUILD_ID")
             .parse()
             .expect("DISCORD_GUILD_ID must be an integer"),
     );
-    let application_id: u64 = env::var("DISCORD_APPLICATION_ID")
-        .expect("Expected environment variable: DISCORD_APPLICATION_ID")
-        .parse()
-        .expect("application id is not a valid id");
-    let channel_id = ChannelId(
+    let application_id = ApplicationId::new(
+        env::var("DISCORD_APPLICATION_ID")
+            .expect("Expected environment variable: DISCORD_APPLICATION_ID")
+            .parse()
+            .expect("application id is not a valid id"),
+    );
+    let channel_id = ChannelId::new(
         env::var("DISCORD_CHANNEL_ID")
             .expect("Expected environment variable: DISCORD_CHANNEL_ID")
             .parse()
